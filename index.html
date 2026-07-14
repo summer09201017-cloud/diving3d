@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#bfd6ea" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9B%B7%3C/text%3E%3C/svg%3E" />
+    <title>3D 滑雪跳台 Ski Jump 3D</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <canvas id="gameCanvas" aria-label="3D 滑雪跳台遊戲畫面"></canvas>
+
+      <!-- 跳次+距離看板 -->
+      <div class="score-sheet" id="scoreSheet" hidden></div>
+
+      <div class="power-panel" id="powerPanel" hidden>
+        <span id="powerLabel">速度</span>
+        <div class="power-track"><div class="power-fill" id="powerFill"></div></div>
+      </div>
+
+      <div class="message-ribbon" id="statusMessage">選擇跳數後開始。</div>
+      <div class="commentary-bar" id="commentaryBar" hidden></div>
+      <div class="goal-flash" id="strikeFlash" hidden>起跳!</div>
+
+      <div class="touch-controls" id="touchControls">
+        <button id="touchLeft" class="touch-action alt" hidden>▲ 前傾 (W)</button>
+        <button id="touchRight" class="touch-action alt" hidden>▼ 收勢 (S)</button>
+        <button id="touchRoll" class="touch-action">🚦 出發 (空白鍵)</button>
+      </div>
+
+      <div class="hud-buttons">
+        <button id="menuButton">選單</button>
+        <button id="audioButton">音效開啟</button>
+        <button id="cameraButton">視角</button>
+      </div>
+
+      <div class="overlay-shell" id="matchOverlay">
+        <div class="overlay-card">
+          <p class="overlay-eyebrow">大跳台</p>
+          <h2 id="overlayTitle">—</h2>
+          <p id="overlayText">—</p>
+          <div class="overlay-actions">
+            <button id="overlayMenuButton">回選單</button>
+            <button id="overlayReplayButton">再跳一輪</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="home-screen visible" id="homeScreen">
+        <div class="home-card">
+          <p class="home-eyebrow">SKI JUMP 3D・冬奧大跳台</p>
+          <h1>3D 滑雪跳台 ⛷</h1>
+          <p class="home-sub">助滑、台端起跳、空中吃浮力——K 點 90 公尺,你能飛多遠?</p>
+
+          <div class="mode-grid" id="modeCardGrid">
+            <button class="mode-card selected" data-mode="solo">
+              <strong>⛷ 大跳台</strong><span>台端「綠燈時機」起跳+空中前傾控制;風向每跳都不同,逆風是朋友!</span>
+            </button>
+          </div>
+
+          <div class="home-row">
+            <label for="framesSelect">跳數</label>
+            <select id="framesSelect">
+              <option value="1">1 跳(快速)</option>
+              <option value="2" selected>2 跳(正規)</option>
+              <option value="3">3 跳(挑戰)</option>
+            </select>
+            <label for="difficultySelect">難度</label>
+            <select id="difficultySelect">
+              <option value="kids">幼兒(超寬時機窗)</option>
+              <option value="child">兒童(寬時機窗)</option>
+              <option value="easy" selected>入門</option>
+              <option value="normal">標準</option>
+              <option value="hard">職業(強風)</option>
+            </select>
+            <label for="audioSelect">音效</label>
+            <select id="audioSelect">
+              <option value="on" selected>開啟</option>
+              <option value="off">靜音</option>
+            </select>
+          </div>
+
+          <p class="home-hint">①按<b>出發(空白鍵/點畫面)</b>開始助滑加速 ②盯住中下方大條——<b>轉綠的瞬間再按一次=完美起跳</b>(按太早跳不高,滑出台端沒按=吃懲罰) ③空中用 <b>W/S(或按鈕)</b>調前傾:壓低吃浮力飛更遠,逆風(⬆)加成、順風(⬇)要更壓低。落地不會摔倒,放心飛!V 鍵換視角。</p>
+          <button class="start-button" id="startMatchButton">開始比賽</button>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
