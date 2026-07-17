@@ -1,5 +1,5 @@
 // 設定持久化(localStorage;Safari 私密模式安全包 try/catch)
-const KEY = "bowling3d-settings-v1";
+const KEY = "diving3d-settings-v1";
 
 export function loadSettings() {
   try {

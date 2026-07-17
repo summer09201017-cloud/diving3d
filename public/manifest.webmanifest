@@ -1,0 +1,24 @@
+{
+  "name": "3D 跳水",
+  "short_name": "3D跳水",
+  "description": "可在手機與 PC 遊玩的 3D 跳水遊戲——十米跳台時機起跳、空中翻騰序列、筆直入水壓水花、裁判五人亮分。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c1322",
+  "theme_color": "#0d2436",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

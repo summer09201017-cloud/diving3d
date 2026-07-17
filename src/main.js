@@ -1,7 +1,7 @@
 import "./styles.css";
-// skijump3d main.js —— UI 接線+跳次/距離/風向+播報(字幕+mp3 人聲)
-// 玩法:按「出發」助滑;台端「綠燈」亮起按「起跳」;空中 W/S(或按鈕)調前傾吃浮力。
-import { SkiJumpGame, DIFFICULTY_PRESETS } from "./game.js";
+// diving3d main.js —— UI 接線+跳次/評分/水花+播報(字幕+mp3 人聲)
+// 玩法:按「起跳」蓄力→大條轉綠再按=完美起跳;空中照提示序列按方向鍵出招;貼水面按「入水」——水花越小分越高。
+import { DivingGame, DIFFICULTY_PRESETS } from "./game.js";
 import { AudioManager } from "./audio.js";
 import { loadSettings, saveSettings } from "./storage.js";
 import { speakLine, setVoiceEnabled } from "./voice.js";
@@ -10,10 +10,12 @@ const $ = (id) => document.getElementById(id);
 const ui = {
   canvas: $("gameCanvas"),
   scoreSheet: $("scoreSheet"),
+  seqPanel: $("seqPanel"),
   powerPanel: $("powerPanel"), powerFill: $("powerFill"), powerLabel: $("powerLabel"),
   statusMessage: $("statusMessage"), commentaryBar: $("commentaryBar"), strikeFlash: $("strikeFlash"),
-  touchRoll: $("touchRoll"), touchLeft: $("touchLeft"), touchRight: $("touchRight"),
-  menuButton: $("menuButton"), audioButton: $("audioButton"), cameraButton: $("cameraButton"),
+  touchRoll: $("touchRoll"),
+  touchUp: $("touchUp"), touchDown: $("touchDown"), touchLeft: $("touchLeft"), touchRight: $("touchRight"),
+  menuButton: $("menuButton"), audioButton: $("audioButton"), cameraButton: $("cameraButton"), fullscreenButton: $("fullscreenButton"),
   matchOverlay: $("matchOverlay"), overlayTitle: $("overlayTitle"), overlayText: $("overlayText"),
   overlayMenuButton: $("overlayMenuButton"), overlayReplayButton: $("overlayReplayButton"),
   homeScreen: $("homeScreen"),
@@ -23,15 +25,15 @@ const ui = {
 
 const settings = loadSettings();
 let selectedDifficulty = DIFFICULTY_PRESETS[settings.difficulty] ? settings.difficulty : "easy";
-let selectedJumps = [1, 2, 3].includes(settings.frames) ? settings.frames : 2;
+let selectedDives = [1, 2, 3].includes(settings.frames) ? settings.frames : 3;
 let audioEnabled = settings.audioEnabled !== false;
 
 const audio = new AudioManager();
 audio.setEnabled(audioEnabled);
 setVoiceEnabled(audioEnabled);
 
-const game = new SkiJumpGame({ canvas: ui.canvas });
-window.__skijump3d = game; // dev hook
+const game = new DivingGame({ canvas: ui.canvas });
+window.__diving3d = game; // dev hook
 
 function pushCommentary(sub, tone = "info", say = "") {
   const bar = ui.commentaryBar;
@@ -57,31 +59,43 @@ game.onEvent = (event) => {
   switch (event.type) {
     case "match-start":
       audio.startCrowd();
-      pushCommentary("大跳台之巔——K 點 90 公尺,飛得越遠越好!", "info", "歡迎來到大跳台,滑雪跳台開始!");
+      pushCommentary("十米跳台——入水越垂直,水花越小,分數越高!", "info", "歡迎來到十米跳台,跳水比賽開始!");
       break;
     case "gate": {
-      const windTxt = event.wind >= 0 ? `逆風 ${event.wind.toFixed(1)}(有利浮力)` : `順風 ${(-event.wind).toFixed(1)}(小心下沉)`;
-      const isLast = event.n === game.totalJumps && game.totalJumps > 1;
-      pushCommentary(`第 ${event.n}/${game.totalJumps} 跳・${windTxt}`, "info", isLast ? "最後一跳,全力以赴!" : (event.wind > 0.8 ? "逆風正好,抓住浮力!" : (event.wind < -0.8 ? "順風要小心,壓低一點!" : "")));
+      const isLast = event.n === game.totalDives && game.totalDives > 1;
+      pushCommentary(`第 ${event.n}/${game.totalDives} 跳・看好動作序列!`, "info", isLast ? "最後一跳,全力以赴!" : "");
       break;
     }
-    case "inrun":
+    case "charge":
       audio.uiTap();
       speakLine("出發!");
       break;
     case "takeoff":
       audio.kick(0.7);
-      if (event.quality > 0.75) { flash("完美起跳!", 900); pushCommentary("完美起跳!壓低吃浮力!", "hot", "完美起跳!"); }
+      if (event.quality > 0.75) { flash("完美起跳!", 900); pushCommentary("完美起跳!照提示出招!", "hot", "完美起跳!"); }
       else if (event.quality > 0.4) { flash("起跳!", 700); speakLine("起跳!"); }
-      else pushCommentary("按太早了……盡量壓低穩住!", "cool", "太早了,浮不起來!");
+      else pushCommentary("有點急……穩住,照提示出招!", "cool", "太早了,穩住!");
       break;
-    case "land": {
+    case "move":
+      if (event.good) { audio.uiTap(); flash(`${event.label}!`, 700); speakLine("動作漂亮!"); }
+      else { audio.buzz(); pushCommentary("順序不對!看下方提示!", "cool", ""); }
+      break;
+    case "entry":
+      if (!event.auto && event.timingQ > 0.75) speakLine("打開入水!");
+      break;
+    case "water": {
       audio.bounce();
-      audio.crowdCheer(event.beyondK ? 1 : 0.7);
-      flash(`${event.dist.toFixed(1)} m${event.beyondK ? " 🥇" : ""}`, 1500);
-      if (event.beyondK) pushCommentary(`飛越 K 點!${event.dist.toFixed(1)} 公尺!`, "hot", "飛越K點!不可思議!");
-      else pushCommentary(`落地 ${event.dist.toFixed(1)} 公尺!`, "hot", "漂亮的落地!");
-      if (event.newPb) setTimeout(() => speakLine("新的個人最佳!"), 1400);
+      audio.crowdCheer(event.small ? 1 : 0.6);
+      if (event.small) { flash("💧 水花好小!", 1300); pushCommentary("唰——筆直入水,水花幾乎消失!", "hot", "筆直入水,幾乎沒有水花!"); }
+      else if (event.splashSize < 0.6) { flash("入水!", 900); pushCommentary("入水!水花中等。", "info", "水花壓得不錯!"); }
+      else { flash("💦 水花四濺!", 1300); pushCommentary("嘩啦——水花有點大!", "cool", "水花有點大,下次更垂直一點!"); }
+      break;
+    }
+    case "scored": {
+      audio.crowdCheer(event.score >= 10 ? 1 : 0.7);
+      flash(`${event.score.toFixed(1)} 分`, 1600);
+      pushCommentary(`裁判亮分:D ${event.d.toFixed(1)} + E ${event.e.toFixed(1)} = ${event.score.toFixed(1)}`, "hot", "裁判亮分了!");
+      if (event.newPb) setTimeout(() => speakLine("新的個人最佳!"), 1500);
       break;
     }
     case "status":
@@ -100,50 +114,79 @@ game.onEvent = (event) => {
   }
 };
 
-// 記分板+起跳綠燈(力道大條通則:中下方大條=時機燈)
+// 記分板+大條(力道大條通則:中下方大條=時機燈)+姿勢序列提示
 game.onHud = (s) => {
   ui.statusMessage.textContent = s.message;
-  // 大條:助滑時=速度條+進綠區整條亮綠;飛行時=前傾度
-  if (s.phase === "inrun") {
+  // 大條:蓄力=進度+綠區亮綠;飛行=入水時機(貼水面轉綠)
+  if (s.phase === "charge") {
     ui.powerPanel.hidden = false;
-    ui.powerLabel.textContent = s.inWindow ? "起跳!" : `${s.speedKmh} km/h`;
-    ui.powerFill.style.transform = `scaleX(${Math.min(1, s.speedKmh / 95)})`;
-    ui.powerFill.classList.toggle("full", s.inWindow);
+    ui.powerLabel.textContent = s.chargeWindow ? "起跳!" : "蓄力…";
+    ui.powerFill.style.transform = `scaleX(${Math.min(1, s.charge)})`;
+    ui.powerFill.classList.toggle("full", s.chargeWindow);
   } else if (s.phase === "flying") {
     ui.powerPanel.hidden = false;
-    ui.powerLabel.textContent = `前傾 ${Math.round(s.lean * 100)}%・${s.dist.toFixed(0)}m`;
-    ui.powerFill.style.transform = `scaleX(${s.lean})`;
-    ui.powerFill.classList.remove("full");
+    if (s.entryPressed) {
+      ui.powerLabel.textContent = "入水!";
+      ui.powerFill.style.transform = "scaleX(1)";
+      ui.powerFill.classList.remove("full");
+    } else {
+      const fill = s.timeToWater === null ? 0 : Math.min(1, Math.max(0, 1 - s.timeToWater / 1.6));
+      ui.powerLabel.textContent = s.entryWindowFlag ? "入水!" : `高度 ${s.altitude.toFixed(1)}m`;
+      ui.powerFill.style.transform = `scaleX(${fill})`;
+      ui.powerFill.classList.toggle("full", s.entryWindowFlag);
+    }
   } else {
     ui.powerPanel.hidden = true;
+    ui.powerFill.classList.remove("full");
   }
-  // 出發/起跳鈕文案
+  // 姿勢序列提示(判定=畫面:做完打勾、當前跳動)
+  if (["gate", "charge", "flying"].includes(s.phase) && s.seq.length) {
+    ui.seqPanel.hidden = false;
+    ui.seqPanel.innerHTML = s.seq.map((m) =>
+      `<span class="seq-chip${m.done ? " done" : ""}${m.current ? " current" : ""}">${m.icon} ${m.label}${m.done ? " ✓" : ""}</span>`
+    ).join("<span class='seq-arrow'>→</span>") + `<span class="seq-arrow">→</span><span class="seq-chip entry${s.entryPressed ? " done" : ""}">💧 入水${s.entryPressed ? " ✓" : ""}</span>`;
+  } else {
+    ui.seqPanel.hidden = true;
+  }
+  // 主按鈕文案
   if (ui.touchRoll) {
     ui.touchRoll.hidden = false;
-    ui.touchRoll.disabled = !["gate", "inrun"].includes(s.phase);
-    ui.touchRoll.textContent = s.phase === "gate" ? "🚦 出發 (空白鍵)" : (s.phase === "inrun" ? (s.inWindow ? "✅ 起跳!(空白鍵)" : "⏳ 等台端…(空白鍵)") : "—");
+    ui.touchRoll.disabled = !["gate", "charge", "flying"].includes(s.phase) || s.entryPressed;
+    ui.touchRoll.textContent = s.phase === "gate" ? "🤿 起跳準備 (空白鍵)"
+      : s.phase === "charge" ? (s.chargeWindow ? "✅ 起跳!(空白鍵)" : "⏳ 蓄力…(空白鍵)")
+      : s.phase === "flying" ? (s.entryPressed ? "💧 入水中…" : (s.entryWindowFlag ? "✅ 入水!(空白鍵)" : "💧 入水 (空白鍵)"))
+      : "—";
   }
-  if (ui.touchLeft) { ui.touchLeft.hidden = s.phase !== "flying"; }
-  if (ui.touchRight) { ui.touchRight.hidden = s.phase !== "flying"; }
+  // 觸控四方向鍵(combo-judge-kit 雷:四顆都要給)
+  const showMoves = s.phase === "flying" && !s.entryPressed;
+  for (const b of [ui.touchUp, ui.touchDown, ui.touchLeft, ui.touchRight]) { if (b) b.hidden = !showMoves; }
   if (s.phase === "menu") { ui.scoreSheet.hidden = true; return; }
   ui.scoreSheet.hidden = false;
-  const rows = (s.results || []).map((r, i) => `<tr><td class="pname">第 ${i + 1} 跳</td><td class="total">${r.toFixed(1)}m</td></tr>`).join("");
-  const windArrow = s.wind >= 0 ? "⬆逆" : "⬇順";
-  ui.scoreSheet.innerHTML = `<table>${rows}</table><div class="stones-left">第 ${s.jumpIdx}/${s.total} 跳・風 ${windArrow}${Math.abs(s.wind).toFixed(1)}・PB ${s.pb.toFixed(1)}m</div>`;
+  const rows = (s.results || []).map((r, i) =>
+    `<tr><td class="pname">第 ${i + 1} 跳</td><td>D${r.d.toFixed(1)}</td><td>E${r.e.toFixed(1)}</td><td class="total">${r.score.toFixed(1)}</td></tr>`
+  ).join("");
+  const judgeTxt = (s.judges || []).length ? `裁判 ${s.judges.map((j) => j.toFixed(1)).join(" / ")}・` : "";
+  ui.scoreSheet.innerHTML = `<table>${rows}</table><div class="stones-left">${judgeTxt}第 ${s.diveIdx}/${s.total} 跳・總分 ${s.totalScore.toFixed(1)}・PB ${s.pb.toFixed(1)}</div>`;
 };
 
-// ── 鍵盤:空白=出發/起跳;W/S=前傾 ──
+// ── 鍵盤:空白=起跳/入水;方向鍵(或 WASD)=空中招式;V=視角 ──
+const KEY2DIR = {
+  ArrowUp: "up", KeyW: "up",
+  ArrowDown: "down", KeyS: "down",
+  ArrowLeft: "left", KeyA: "left",
+  ArrowRight: "right", KeyD: "right",
+};
 window.addEventListener("keydown", (e) => {
   if (e.target && ["INPUT", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
-  if (["Space", "ArrowUp", "ArrowDown", "KeyW", "KeyS"].includes(e.code)) e.preventDefault();
+  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
   if (game.phase === "menu" || game.phase === "done") return;
   audio.unlock();
   if (e.code === "Space" && !e.repeat) game.action();
-  if (e.code === "KeyW" || e.code === "ArrowUp") game.nudgeLean(0.06);
-  if (e.code === "KeyS" || e.code === "ArrowDown") game.nudgeLean(-0.06);
+  const dir = KEY2DIR[e.code];
+  if (dir && !e.repeat) game.tryMove(dir);
   if (e.code === "KeyV" && !e.repeat) game.cycleCamView();
 });
-// 點畫面=出發/起跳(手機單指流)
+// 點畫面=起跳/入水(手機單指流)
 ui.canvas.addEventListener("pointerdown", (e) => {
   if (game.phase === "menu" || game.phase === "done") return;
   e.preventDefault();
@@ -152,18 +195,20 @@ ui.canvas.addEventListener("pointerdown", (e) => {
 });
 window.addEventListener("contextmenu", (e) => { if (e.target.closest(".touch-action") || e.target.id === "gameCanvas") e.preventDefault(); });
 
-// 觸控鈕:出發/起跳+前傾兩鈕(按住連續調)
+// 觸控鈕:主鍵+四方向招式鍵
 ui.touchRoll.addEventListener("pointerdown", (e) => { e.preventDefault(); audio.unlock(); game.action(); });
-let holdL = null, holdR = null;
-ui.touchLeft.addEventListener("pointerdown", (e) => { e.preventDefault(); audio.unlock(); holdL = setInterval(() => game.nudgeLean(0.05), 60); });
-ui.touchRight.addEventListener("pointerdown", (e) => { e.preventDefault(); audio.unlock(); holdR = setInterval(() => game.nudgeLean(-0.05), 60); });
-for (const ev of ["pointerup", "pointerleave", "pointercancel"]) {
-  ui.touchLeft.addEventListener(ev, () => clearInterval(holdL));
-  ui.touchRight.addEventListener(ev, () => clearInterval(holdR));
+for (const [btn, dir] of [[ui.touchUp, "up"], [ui.touchDown, "down"], [ui.touchLeft, "left"], [ui.touchRight, "right"]]) {
+  if (btn) btn.addEventListener("pointerdown", (e) => { e.preventDefault(); audio.unlock(); game.tryMove(dir); });
 }
 
 // HUD 鈕
 ui.cameraButton.addEventListener("click", () => { audio.uiTap(); game.cycleCamView(); });
+ui.fullscreenButton.addEventListener("click", () => {
+  audio.uiTap();
+  const el = document.documentElement;
+  if (!document.fullscreenElement) (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el);
+  else (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
+});
 ui.menuButton.addEventListener("click", () => {
   audio.uiTap();
   audio.stopCrowd();
@@ -172,6 +217,7 @@ ui.menuButton.addEventListener("click", () => {
   ui.matchOverlay.classList.remove("visible");
   ui.scoreSheet.hidden = true;
   ui.powerPanel.hidden = true;
+  ui.seqPanel.hidden = true;
 });
 const setAudio = (on) => {
   audioEnabled = on;
@@ -184,20 +230,20 @@ ui.audioButton.addEventListener("click", () => setAudio(!audioEnabled));
 ui.audioSelect.addEventListener("change", (e) => setAudio(e.target.value === "on"));
 
 function persist() {
-  saveSettings({ modeId: "solo", difficulty: selectedDifficulty, frames: selectedJumps, audioEnabled });
+  saveSettings({ modeId: "solo", difficulty: selectedDifficulty, frames: selectedDives, audioEnabled });
 }
 function syncMenu() {
   ui.difficultySelect.value = selectedDifficulty;
-  ui.framesSelect.value = String(selectedJumps);
+  ui.framesSelect.value = String(selectedDives);
   ui.audioSelect.value = audioEnabled ? "on" : "off";
 }
 ui.difficultySelect.addEventListener("change", (e) => { selectedDifficulty = e.target.value; persist(); });
-ui.framesSelect.addEventListener("change", (e) => { selectedJumps = Number(e.target.value); persist(); });
+ui.framesSelect.addEventListener("change", (e) => { selectedDives = Number(e.target.value); persist(); });
 
 ui.startMatchButton.addEventListener("click", () => {
   audio.unlock(); audio.uiTap();
   persist();
-  game.applyPresentation({ difficulty: selectedDifficulty, frames: selectedJumps });
+  game.applyPresentation({ difficulty: selectedDifficulty, frames: selectedDives });
   ui.homeScreen.classList.remove("visible");
   ui.matchOverlay.classList.remove("visible");
   game.startMatch();
@@ -214,6 +260,13 @@ ui.overlayMenuButton.addEventListener("click", () => {
   ui.homeScreen.classList.add("visible");
   ui.scoreSheet.hidden = true;
 });
+
+// SW 註冊(diving3d-nf1,HTML 網路優先)
+if ("serviceWorker" in navigator && !["localhost", "127.0.0.1"].includes(location.hostname)) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => { /* ignore */ });
+  });
+}
 
 const doResize = () => game.resize();
 window.addEventListener("resize", doResize);

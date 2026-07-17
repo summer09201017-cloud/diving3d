@@ -1,4 +1,4 @@
-/* 3D 足球 —— 深夜球場 UI(照 baseball3d styles.css 範式) */
+/* 3D 跳水 —— 水上中心 UI(照 baseball3d styles.css 範式,承 skijump3d 殼層) */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body {
@@ -132,7 +132,7 @@ body {
 /* 主選單 */
 .home-screen {
   position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
-  background: radial-gradient(circle at 50% 20%, #163a24 0%, #0c1322 70%);
+  background: radial-gradient(circle at 50% 20%, #14374f 0%, #0c1322 70%);
   z-index: 70; overflow: auto;
 }
 .home-screen.visible { display: flex; }
@@ -205,3 +205,50 @@ select option { background: #101a2e; color: #eef2f8; }
 .power-track { width: min(46vw, 440px) !important; height: 20px !important; }
 .power-fill { box-shadow: 0 0 14px rgba(255,210,74,.85); }
 #powerLabel { font-size: 16px !important; }
+
+/* ── diving3d 追加 ── */
+/* ★hidden 鐵則:作者樣式的 display:flex 會蓋過 UA 的 [hidden]，必須全域重宣 */
+[hidden] { display: none !important; }
+/* 大條綠區:轉綠=按的時機(起跳/入水共用) */
+.power-fill.full { background: #3ee06c !important; box-shadow: 0 0 22px rgba(62, 224, 108, 0.95) !important; }
+
+/* 姿勢序列提示(空中照著按) */
+.seq-panel {
+  position: absolute; top: 112px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center;
+  max-width: min(92vw, 720px);
+  padding: 8px 14px; border-radius: 14px;
+  background: rgba(10, 16, 30, 0.78); border: 1px solid rgba(125, 180, 255, 0.4);
+  z-index: 21;
+}
+.seq-chip {
+  padding: 6px 12px; border-radius: 999px; font-size: 15px; font-weight: 800;
+  background: rgba(255, 255, 255, 0.1); color: #d2e6ff; border: 1.5px solid rgba(125, 180, 255, 0.45);
+}
+.seq-chip.done { background: rgba(62, 224, 108, 0.18); color: #9df0b4; border-color: #3ee06c; }
+.seq-chip.current { background: rgba(255, 210, 74, 0.2); color: #ffe070; border-color: #ffd24a; animation: seq-pulse 0.8s ease infinite; }
+.seq-chip.entry { border-style: dashed; }
+.seq-arrow { color: #9fb6cf; font-weight: 800; }
+@keyframes seq-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(255, 210, 74, 0); }
+  50% { transform: scale(1.08); box-shadow: 0 0 16px rgba(255, 210, 74, 0.7); }
+}
+@media (max-width: 720px) {
+  .seq-panel { top: 130px; }
+  .seq-chip { font-size: 12.5px; padding: 4px 9px; }
+}
+
+/* 手機直向提示:轉橫再玩(系列慣例) */
+.rotate-hint { display: none; }
+@media (orientation: portrait) and (max-width: 820px) {
+  .rotate-hint {
+    display: flex; position: fixed; inset: 0; z-index: 90;
+    align-items: center; justify-content: center;
+    background: rgba(6, 10, 20, 0.92);
+  }
+  .rotate-card {
+    text-align: center; font-size: 20px; line-height: 2; color: #d2e6ff;
+    padding: 26px 30px; border-radius: 18px; border: 2px solid #7db4ff;
+    background: #101a2e;
+  }
+}
