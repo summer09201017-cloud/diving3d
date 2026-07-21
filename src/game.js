@@ -3,6 +3,7 @@
 //       →貼近水面按「入水」打開身體——入水越垂直、時機越準=水花越小=分越高。三跳制取總分。
 // 照 3d-game-kit:量值可調(跳數/難度)、V 五檔視角、字幕+人聲、溫柔規則(沒按=自動起跳/自動入水,永不摔)。
 import * as THREE from "three";
+import { animateIdleHead, animateCrowdCheer, EAR_SAFE_PHI } from "./idle-life.js";
 
 export const DIFFICULTY_LABELS = { kids: "幼兒", child: "兒童", easy: "入門", normal: "標準", hard: "職業" };
 // window=起跳時機窗(秒)、entryWindow=入水時機窗(秒)、moves=姿勢序列長度、assist=幼兒加成
@@ -172,7 +173,7 @@ export class DivingGame {
     }
     // 看台觀眾(crowd-kit 鐵則:臉朝池子)——+x 側三排階梯看台
     {
-      const rows = 3, cols = 20, N = rows * cols;
+      const rows = 3, cols = 20, N = (rows - 1) * cols; // 後兩排=靜態 InstancedMesh 背景;前排改個別人偶(會歡呼)
       const standMat = new THREE.MeshStandardMaterial({ color: 0x9db8ca, roughness: 0.9 });
       for (let r = 0; r < rows; r += 1) {
         const step = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9 + r * 0.9, 26), standMat);
@@ -194,7 +195,7 @@ export class DivingGame {
         inst.setMatrixAt(idx, dummy.matrix);
       };
       let i = 0;
-      for (let r = 0; r < rows; r += 1) {
+      for (let r = 1; r < rows; r += 1) { // r=0(前排)改個別人偶,見下
         for (let c = 0; c < cols; c += 1) {
           const x = 9.4 + r * 2.2 + rand(-0.25, 0.25);
           const z = -19.6 + c * 1.24 + rand(-0.2, 0.2);
@@ -215,6 +216,67 @@ export class DivingGame {
         }
       }
       g.add(heads, torsos, eyesW, pupils, mouths);
+      // 前排=個別人偶(torso+headGroup+雙臂 pivot肩/joint肘)→ animateCrowdCheer 舉手人浪
+      // 髮兩件式(耳前無髮鐵律):頭頂瓜皮+後腦半球 EAR_SAFE_PHI;相位=座號×0.9+對側偏移(決定性,禁 random)
+      this.crowdFigures = [];
+      const hairCols = [0x2a2118, 0x4a3320, 0x6b4a2a, 0x1a1a22, 0x5c5248];
+      for (let c = 0; c < cols; c += 1) {
+        const fig = new THREE.Group();
+        fig.position.set(9.4 + rand(-0.18, 0.18), 0.9, -19.6 + c * 1.24 + rand(-0.15, 0.15));
+        fig.rotation.y = -Math.PI / 2; // 臉朝池子(-x)
+        const skinMat = new THREE.MeshStandardMaterial({ color: skins[c % skins.length], roughness: 0.9 });
+        const robeMat = new THREE.MeshStandardMaterial({ color: robes[c % robes.length], roughness: 1 });
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.34, 0.18), robeMat);
+        torso.position.y = 0.23;
+        const headGroup = new THREE.Group();
+        headGroup.position.y = 0.55;
+        const skull = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), skinMat);
+        const eyeGeo = new THREE.SphereGeometry(0.032, 6, 6);
+        const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const eyL = new THREE.Mesh(eyeGeo, eyeMat);
+        eyL.position.set(-0.062, 0.035, 0.115);
+        const eyR = eyL.clone(); eyR.position.x = 0.062;
+        const pupMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+        const puL = new THREE.Mesh(new THREE.SphereGeometry(0.016, 5, 5), pupMat);
+        puL.position.set(-0.062, 0.035, 0.142);
+        const puR = puL.clone(); puR.position.x = 0.062;
+        const mo = new THREE.Mesh(new THREE.SphereGeometry(0.024, 6, 6), new THREE.MeshStandardMaterial({ color: 0x8a2e2e }));
+        mo.position.set(0, -0.055, 0.13);
+        const hairMat = new THREE.MeshStandardMaterial({ color: hairCols[c % hairCols.length], roughness: 0.95 });
+        const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.168, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.32), hairMat);
+        hairCap.position.y = 0.018;
+        const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.165, 10, 8, EAR_SAFE_PHI.start, EAR_SAFE_PHI.end - EAR_SAFE_PHI.start, Math.PI * 0.2, Math.PI * 0.42), hairMat);
+        hairBack.position.y = 0.012;
+        const erL = new THREE.Mesh(new THREE.SphereGeometry(0.034, 6, 6), skinMat);
+        erL.position.set(-0.155, 0, 0.008);
+        erL.scale.set(0.5, 1, 0.72);
+        const erR = erL.clone(); erR.position.x = 0.155;
+        headGroup.add(skull, eyL, eyR, puL, puR, mo, hairCap, hairBack, erL, erR);
+        const mkCrowdArm = (sx) => {
+          const pivot = new THREE.Group();
+          pivot.position.set(sx, 0.37, 0); // 肩
+          const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.028, 0.13, 3, 6), robeMat);
+          upper.position.y = -0.085;
+          pivot.add(upper);
+          const joint = new THREE.Group(); // 肘
+          joint.position.y = -0.17;
+          pivot.add(joint);
+          const lower = new THREE.Mesh(new THREE.CapsuleGeometry(0.024, 0.11, 3, 6), skinMat);
+          lower.position.y = -0.07;
+          joint.add(lower);
+          pivot.rotation.x = -0.5;
+          return { pivot, joint };
+        };
+        const leftArm = mkCrowdArm(-0.165);
+        const rightArm = mkCrowdArm(0.165);
+        fig.add(torso, headGroup, leftArm.pivot, rightArm.pivot);
+        g.add(fig);
+        this.crowdFigures.push({
+          fig: { headGroup, leftArm, rightArm, rig: fig },
+          phase: c * 0.9 + (c % 2 ? Math.PI * 0.6 : 0),
+          rigY: 0.9,
+        });
+      }
     }
     // 裁判席五人(-x 側,面向池子;亮分時舉牌)——npc-ai-kit 擬人鐵則:有臉、面向場地
     this.judges = [];
@@ -226,14 +288,31 @@ export class DivingGame {
       const suitCol = [0x33455c, 0x5c3344, 0x33574a, 0x4d3d5c, 0x5c5033][j];
       const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.52, 0.26), new THREE.MeshStandardMaterial({ color: suitCol, roughness: 0.85 }));
       torso.position.y = 1.16;
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 12), new THREE.MeshStandardMaterial({ color: 0xf2c89a, roughness: 0.8 }));
-      head.position.y = 1.62;
+      // headGroup(樞紐=頭中心 y=1.62,idle 左顧右盼整顆頭連臉轉)
+      const headGroup = new THREE.Group();
+      headGroup.position.y = 1.62;
+      const skinMat = new THREE.MeshStandardMaterial({ color: 0xf2c89a, roughness: 0.8 });
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.19, 12, 12), skinMat);
       const eL = new THREE.Mesh(new THREE.SphereGeometry(0.028, 6, 6), new THREE.MeshBasicMaterial({ color: 0x1a1a1a }));
-      eL.position.set(-0.065, 1.66, 0.165);
+      eL.position.set(-0.065, 0.04, 0.165);
       const eR = eL.clone(); eR.position.x = 0.065;
+      // 嘴包一層 scale=1 的 wrapper(idle 微笑放大不吃掉原本壓扁比例)
+      const smileGrp = new THREE.Group();
+      smileGrp.position.set(0, -0.07, 0.17);
       const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 6), new THREE.MeshBasicMaterial({ color: 0x8a2e2e }));
-      mouth.position.set(0, 1.55, 0.17);
       mouth.scale.set(1.4, 0.5, 0.6);
+      smileGrp.add(mouth);
+      // 髮兩件式(耳前無髮鐵律):頭頂瓜皮+後腦半球(EAR_SAFE_PHI),兩鬢露臉頰+耳朵
+      const hairMat = new THREE.MeshStandardMaterial({ color: [0x2a2118, 0x4a3a26, 0x1a1a20, 0x5c5248, 0x3a2c1c][j], roughness: 0.9 });
+      const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.32), hairMat);
+      hairCap.position.y = 0.02;
+      const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.197, 12, 8, EAR_SAFE_PHI.start, EAR_SAFE_PHI.end - EAR_SAFE_PHI.start, Math.PI * 0.2, Math.PI * 0.42), hairMat);
+      hairBack.position.y = 0.015;
+      const earL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), skinMat);
+      earL.position.set(-0.185, 0, 0.01);
+      earL.scale.set(0.5, 1, 0.72);
+      const earR = earL.clone(); earR.position.x = 0.185;
+      headGroup.add(head, eL, eR, smileGrp, hairCap, hairBack, earL, earR);
       // 舉牌手臂(pivot 在肩)+分數牌(CanvasTexture 程序生成,零美術檔)
       const armPivot = new THREE.Group();
       armPivot.position.set(0.26, 1.38, 0);
@@ -247,10 +326,10 @@ export class DivingGame {
       card.position.set(0, 0.62, 0);
       armPivot.add(card);
       armPivot.rotation.x = Math.PI * 0.5; // 放下(牌收在桌面)
-      judge.add(torso, head, eL, eR, mouth, armPivot);
+      judge.add(torso, headGroup, armPivot);
       judge.position.set(-8.3, 0.12, -3.4 - j * 2.05);
       judge.rotation.y = Math.PI / 2; // 面向池子(+x)——注意:−π/2 是背對,牌面會鏡像
-      judge.userData = { armPivot, cvs, tex, raise: 0 };
+      judge.userData = { armPivot, cvs, tex, raise: 0, headGroup, smileGrp };
       this.judges.push(judge);
       g.add(judge);
     }
@@ -276,20 +355,38 @@ export class DivingGame {
     waist.position.y = 0.96;
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.16, 10), skin);
     neck.position.y = 1.72;
+    // headGroup(樞紐=頭中心,供 idle 轉頭;整顆頭連臉一起轉)——外層朝向由 diver root 管
     const head = new THREE.Group();
     const skull = new THREE.Mesh(new THREE.SphereGeometry(0.23, 16, 16), skin);
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.245, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), new THREE.MeshStandardMaterial({ color: 0x2a5ac8, roughness: 0.4 }));
+    // 泳帽兩件式(耳前無髮鐵律):①頭頂瓜皮(theta 0→0.32π,高於眉/眼/耳)②後腦半球(EAR_SAFE_PHI)
+    const capMat = new THREE.MeshStandardMaterial({ color: 0x2a5ac8, roughness: 0.4 });
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.245, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.32), capMat);
     cap.position.y = 0.03;
+    const capBack = new THREE.Mesh(new THREE.SphereGeometry(0.242, 16, 10, EAR_SAFE_PHI.start, EAR_SAFE_PHI.end - EAR_SAFE_PHI.start, Math.PI * 0.2, Math.PI * 0.44), capMat);
+    capBack.position.y = 0.02;
     const goggle = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.09, 0.06), dark);
     goggle.position.set(0, 0.04, 0.2);
     const eL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), white);
     eL.position.set(-0.08, 0.05, 0.205);
     const eR = eL.clone(); eR.position.x = 0.08;
+    // 五官補齊:瞳孔+眉毛+雙耳(耳前露臉頰)
+    const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 6), dark);
+    pupilL.position.set(-0.08, 0.05, 0.238);
+    const pupilR = pupilL.clone(); pupilR.position.x = 0.08;
+    const browL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.022, 0.02), dark);
+    browL.position.set(-0.08, 0.125, 0.205);
+    const browR = browL.clone(); browR.position.x = 0.08;
+    const earL = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), skin);
+    earL.position.set(-0.225, 0.01, 0.01);
+    earL.scale.set(0.5, 1, 0.72);
+    const earR = earL.clone(); earR.position.x = 0.225;
     const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.013, 8, 12, Math.PI), dark);
     mouth.position.set(0, -0.09, 0.19);
     mouth.rotation.z = Math.PI;
-    head.add(skull, cap, goggle, eL, eR, mouth);
+    head.add(skull, cap, capBack, goggle, eL, eR, pupilL, pupilR, browL, browR, earL, earR, mouth);
     head.position.y = 1.95;
+    this.headGroup = head;  // idle 轉頭樞紐(頭中心)
+    this.smile = mouth;     // idle 微笑放大
     const mkLeg = (sx) => {
       const pivot = new THREE.Group();
       const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.4, 4, 8), skin);
@@ -766,6 +863,24 @@ export class DivingGame {
     }
     // 池水微波
     if (this.waterMat) this.waterMat.color.setHSL(0.565, 0.6, 0.42 + Math.sin(t * 1.3) * 0.015);
+    // ── idle 生動(idle-life.js)──
+    // 主角:只在跳台待機/結算(menu/gate/done)偶爾轉頭+微笑;蓄力/空中翻騰/入水/行禮不轉頭,平滑回正
+    if (this.phase === "menu" || this.phase === "gate" || this.phase === "done") {
+      animateIdleHead(this.headGroup, this.smile, t, { phase: 0.7, period: 5.4 });
+    } else if (this.headGroup) {
+      this.headGroup.rotation.y += (0 - this.headGroup.rotation.y) * 0.15;
+      if (this.smile) {
+        this.smile.scale.x += (1 - this.smile.scale.x) * 0.15;
+        this.smile.scale.y += (1 - this.smile.scale.y) * 0.15;
+      }
+    }
+    // 裁判席:各自錯開相位左顧右盼(決定性,幅度小=莊重)
+    for (let ji = 0; ji < this.judges.length; ji += 1) {
+      const u = this.judges[ji].userData;
+      animateIdleHead(u.headGroup, u.smileGrp, t, { phase: ji * 1.7, period: 6.2 + ji * 0.4, yaw: 0.42, smile: 1.25 });
+    }
+    // 看台前排:舉手人浪+左右看(相位=座號錯開)
+    animateCrowdCheer(this.crowdFigures, t);
     // ── 鏡頭 ──
     let tPos, tLook;
     const p = this.diver.position;
